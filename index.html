@@ -1,0 +1,312 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PokéBinder</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f5fa;color:#20283a;font-family:Arial,sans-serif}
+header{background:linear-gradient(120deg,#243b85,#6385ed);color:white;padding:28px 18px}
+.wrap{max-width:1050px;margin:auto;padding:0 16px}
+h1{font-size:36px;margin:0}
+header p{margin:7px 0}
+main{padding:22px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.stat,.panel{background:white;border:1px solid #e1e6ef;border-radius:14px;padding:17px;margin-bottom:15px}
+.stat small{color:#68738a}
+.stat strong{display:block;font-size:24px;margin-top:5px}
+h2{font-size:20px;margin:0 0 14px}
+.search{display:flex;gap:10px}
+input{padding:12px;border:1px solid #ccd4e2;border-radius:9px;font-size:15px;min-width:0}
+.search input{flex:1}
+button{background:#4169e1;color:white;border:0;border-radius:9px;padding:11px 16px;font-weight:bold;cursor:pointer}
+button:hover{background:#294fbd}
+button:disabled{opacity:.6}
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:15px}
+.card{display:flex;gap:10px;background:#fff;border:1px solid #e1e6ef;border-radius:12px;padding:10px}
+.card img{width:90px;object-fit:contain;align-self:flex-start}
+.info{min-width:0}
+.info b{display:block}
+.info small{display:block;color:#68738a;margin:4px 0}
+.price{color:#24764b;font-weight:bold;margin:7px 0}
+.info button{font-size:12px;padding:8px}
+.status{color:#68738a;font-size:14px;margin-top:12px}
+.item{display:flex;align-items:center;gap:12px;border-top:1px solid #e1e6ef;padding:12px 0}
+.item img{width:60px;max-height:85px;object-fit:contain}
+.details{flex:1;min-width:0}
+.details small{display:block;color:#68738a;margin-top:4px}
+.item input{width:65px;padding:8px}
+.remove{background:#fff0f0;color:#c43c45;padding:8px}
+.empty{text-align:center;padding:22px;color:#68738a}
+footer{text-align:center;color:#68738a;font-size:12px;padding:20px}
+@media(max-width:550px){
+.stats{grid-template-columns:1fr 1fr}
+.stat:last-child{grid-column:span 2}
+.search{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+<h1>🃏 PokéBinder</h1>
+<p>Your Pokémon collection, all in one place!</p>
+</div>
+</header>
+
+<main class="wrap">
+
+<section class="stats">
+<div class="stat">
+<small>Total cards</small>
+<strong id="count">0</strong>
+</div>
+<div class="stat">
+<small>Unique cards</small>
+<strong id="unique">0</strong>
+</div>
+<div class="stat">
+<small>Binder value</small>
+<strong id="total">$0.00</strong>
+</div>
+</section>
+
+<section class="panel">
+<h2>🔎 Search Pokémon Cards</h2>
+<div class="search">
+<input id="search" placeholder="Search Charizard, Pikachu, Mew...">
+<button id="searchButton">Search</button>
+</div>
+<div id="status" class="status">Enter a Pokémon name to find cards.</div>
+<div id="results" class="results"></div>
+</section>
+
+<section class="panel">
+<h2>📚 My Binder</h2>
+<div id="binder">
+<div class="empty">Your binder is empty. Find a card to get started!</div>
+</div>
+</section>
+
+</main>
+
+<footer>
+Card information and images from Pokémon TCG API.
+Prices are TCGplayer market estimates when available.
+</footer>
+
+<script>
+const API="https://api.pokemontcg.io/v2/cards";
+
+let binder=[];
+try{
+binder=JSON.parse(localStorage.getItem("pokebinder")||"[]");
+}catch(e){binder=[];}
+
+const $=id=>document.getElementById(id);
+
+function money(value){
+return value==null?"Unavailable":"$"+Number(value).toFixed(2);
+}
+
+function getPrice(card){
+const prices=card.tcgplayer?.prices;
+if(!prices)return null;
+
+const types=[
+"normal",
+"holofoil",
+"reverseHolofoil",
+"1stEditionHolofoil",
+"unlimitedHolofoil"
+];
+
+for(const type of types){
+if(prices[type]?.market!=null){
+return Number(prices[type].market);
+}
+}
+
+for(const type of Object.values(prices)){
+if(type?.market!=null)return Number(type.market);
+}
+return null;
+}
+
+function save(){
+localStorage.setItem("pokebinder",JSON.stringify(binder));
+renderBinder();
+}
+
+function renderBinder(){
+const count=binder.reduce((sum,c)=>sum+c.qty,0);
+const total=binder.reduce((sum,c)=>sum+(c.price||0)*c.qty,0);
+
+$("count").textContent=count;
+$("unique").textContent=binder.length;
+$("total").textContent=money(total);
+
+const container=$("binder");
+container.innerHTML="";
+
+if(!binder.length){
+container.innerHTML='<div class="empty">Your binder is empty. Find a card to get started!</div>';
+return;
+}
+
+binder.forEach((card,index)=>{
+const item=document.createElement("div");
+item.className="item";
+
+const img=document.createElement("img");
+img.src=card.image;
+img.alt=card.name;
+
+const details=document.createElement("div");
+details.className="details";
+
+const name=document.createElement("b");
+name.textContent=card.name;
+
+const set=document.createElement("small");
+set.textContent=card.set+" · #"+card.number;
+
+const price=document.createElement("small");
+price.textContent="TCGplayer: "+money(card.price)+" each";
+
+details.append(name,set,price);
+
+const quantity=document.createElement("input");
+quantity.type="number";
+quantity.min="1";
+quantity.max="999";
+quantity.value=card.qty;
+quantity.setAttribute("aria-label","Card quantity");
+
+quantity.addEventListener("change",()=>{
+card.qty=Math.max(1,Math.min(999,parseInt(quantity.value)||1));
+save();
+});
+
+const remove=document.createElement("button");
+remove.className="remove";
+remove.textContent="Remove";
+remove.onclick=()=>{
+binder.splice(index,1);
+save();
+};
+
+item.append(img,details,quantity,remove);
+container.append(item);
+});
+}
+
+function addCard(card){
+const existing=binder.find(c=>c.id===card.id);
+
+if(existing){
+existing.qty++;
+}else{
+binder.push({
+id:card.id,
+name:card.name,
+set:card.set?.name||"Unknown set",
+number:card.number||"",
+image:card.images?.small||"",
+price:getPrice(card),
+qty:1
+});
+}
+
+save();
+}
+
+async function searchCards(){
+const query=$("search").value.trim();
+
+if(!query){
+$("status").textContent="Please enter a Pokémon name.";
+return;
+}
+
+$("searchButton").disabled=true;
+$("status").textContent="Searching the Pokémon card database...";
+$("results").innerHTML="";
+
+try{
+const safeQuery=query.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g," ");
+const url=API+"?q="+encodeURIComponent("name:*"+safeQuery+"*")+"&pageSize=30&orderBy=name";
+
+const response=await fetch(url);
+
+if(!response.ok){
+throw new Error("Database error: "+response.status);
+}
+
+const data=await response.json();
+
+if(!data.data||data.data.length===0){
+$("status").textContent="No cards found. Try another Pokémon name.";
+return;
+}
+
+$("status").textContent="Found "+data.totalCount+" matching cards.";
+
+data.data.forEach(card=>{
+const result=document.createElement("div");
+result.className="card";
+
+const img=document.createElement("img");
+img.src=card.images?.small||"";
+img.alt=card.name;
+
+const info=document.createElement("div");
+info.className="info";
+
+const name=document.createElement("b");
+name.textContent=card.name;
+
+const set=document.createElement("small");
+set.textContent=card.set?.name||"Unknown set";
+
+const number=document.createElement("small");
+number.textContent="Card #"+(card.number||"N/A");
+
+const price=document.createElement("div");
+price.className="price";
+price.textContent=money(getPrice(card));
+
+const add=document.createElement("button");
+add.textContent="Add to binder";
+add.onclick=()=>{
+addCard(card);
+add.textContent="Added!";
+setTimeout(()=>add.textContent="Add to binder",1000);
+};
+
+info.append(name,set,number,price,add);
+result.append(img,info);
+$("results").append(result);
+});
+
+}catch(error){
+$("status").textContent="Search failed. Check your internet connection and try again. "+error.message;
+}finally{
+$("searchButton").disabled=false;
+}
+}
+
+$("searchButton").addEventListener("click",searchCards);
+
+$("search").addEventListener("keydown",event=>{
+if(event.key==="Enter")searchCards();
+});
+
+renderBinder();
+</script>
+
+</body>
+</html>
